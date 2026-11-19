@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Tower Climb - Manual Jump</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;height:100dvh;overflow:hidden}
+  body{background:#050a14;color:#eaf6ff;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:8px;touch-action:none}
+  h1{font-size:clamp(22px,6vw,38px);letter-spacing:2px;text-align:center;text-shadow:0 0 22px #00e5ff;line-height:1}
+  h1 span{color:#7dff9e}
+  p.sub{opacity:.75;margin:4px 0 8px;text-align:center;font-size:clamp(12px,3.5vw,14px)}
+  #hud{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:8px;width:100%;max-width:480px}
+  .pill{background:#0e1a2e;border:1px solid #274a6a;border-radius:999px;padding:6px 12px;font-weight:700;font-size:13px;white-space:nowrap}
+  .pill b{color:#7dff9e}
+  /* MOBILE SCALING: wrap fills available space, canvas stretches to it */
+  #wrap{position:relative;width:min(480px,100%);flex:1;min-height:320px;max-height:720px;background:#0a1626;border:3px solid #1e4a6a;border-radius:18px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+  canvas{width:100%;height:100%;display:block;touch-action:none}
+  .overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:18px;background:rgba(2,8,18,.88);z-index:5}
+  .overlay.hidden{display:none}
+  .overlay h2{font-size:clamp(26px,7vw,34px);margin-bottom:8px}
+  .overlay p{opacity:.85;line-height:1.5;max-width:320px;font-size:14px}
+  .big{font-size:48px;margin:4px 0}
+  button{margin-top:12px;background:#00e5ff;color:#02181d;border:0;padding:13px 22px;border-radius:999px;font-weight:900;font-size:16px;cursor:pointer;box-shadow:0 6px 0 #007a8a;touch-action:manipulation}
+  button:active{transform:translateY(3px);box-shadow:0 2px 0 #007a8a}
+  button.secondary{background:#222;border:1px solid #444;color:#fff;box-shadow:none}
+  kbd{background:#000;border:1px solid #555;border-bottom-width:3px;border-radius:6px;padding:2px 8px;font-family:inherit}
+  #controls{display:flex;gap:10px;margin-top:10px;width:100%;max-width:480px;justify-content:center;align-items:center}
+  #controls button{margin:0;width:72px;height:58px;font-size:26px;padding:0;flex-shrink:0}
+  #controls button.jump{width:92px;height:58px;background:#ffe600;color:#111;font-size:15px;box-shadow:0 6px 0 #a68a00}
+  .hint{margin-top:8px;font-size:12px;opacity:.7;text-align:center;padding-bottom:4px}
+  #comboPop{position:absolute;left:50%;top:28%;transform:translate(-50%,-50%);font-size:clamp(30px,9vw,44px);font-weight:900;color:#ffe600;text-shadow:0 0 18px #ffaa00,0 4px 0 #000;z-index:6;pointer-events:none;opacity:0;transition:opacity .15s;white-space:nowrap}
+  #topBar{position:absolute;top:0;left:0;right:0;height:4px;background:#ff6b6b;z-index:4;opacity:.9}
+</style>
+</head>
+<body>
+  <h1>TOWER <span>CLIMB</span></h1>
+  <p class="sub">Manual jump — press SPACE to jump, don't fall!</p>
+  <div id="hud">
+    <div class="pill">Floor: <b id="floor">0</b></div>
+    <div class="pill">Best: <b id="best">0</b></div>
+    <div class="pill">Combo: <b id="combo">—</b></div>
+    <div class="pill">Speed: <b id="speed">1.0</b></div>
+  </div>
+  <div id="wrap">
+    <div id="topBar"></div>
+    <canvas id="game"></canvas>
+    <div id="comboPop"></div>
+    <div id="startScreen" class="overlay">
+      <div class="big">🧊</div>
+      <h2>Ready to Climb?</h2>
+      <p><kbd>←</kbd> <kbd>→</kbd> / <kbd>A</kbd> <kbd>D</kbd> to move<br><kbd>SPACE</kbd> / <kbd>↑</kbd> / <kbd>W</kbd> to JUMP<br><br>No auto-jump anymore — you control every jump!</p>
+      <button id="startBtn">▶ START CLIMB</button>
+      <p style="margin-top:10px;font-size:12px">On mobile use ◀ ▶ to move and JUMP button to jump.</p>
+    </div>
+    <div id="gameOverScreen" class="overlay hidden">
+      <div class="big">💀</div>
+      <h2>YOU FELL!</h2>
+      <p>You reached floor <b id="finalFloor">0</b><br>Best: <b id="finalBest">0</b> &bull; Max combo: <b id="finalCombo">—</b></p>
+      <button id="restartBtn">↻ CLIMB AGAIN</button>
+      <button class="secondary" id="menuBtn">Menu</button>
+    </div>
+    <div id="pauseScreen" class="overlay hidden">
+      <h2>⏸ Paused</h2><p>Take a breath.</p><button id="resumeBtn">Resume</button>
+    </div>
+  </div>
+  <div id="controls">
+    <button id="leftBtn">◀</button>
+    <button id="jumpBtn" class="jump">JUMP ⤒</button>
+    <button id="rightBtn">▶</button>
+    <button id="pauseBtn">⏸</button>
+  </div>
+  <div class="hint">Desktop: ← → move • SPACE / ↑ / W jump • P pause • Enter restart &nbsp;|&nbsp; Mobile: buttons below</div>
+<script>
+const canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+const wrap=document.getElementById('wrap');
+let W=420, H=640;
+function resize(){
+  // Scale canvas to the actual box size so it looks right on any phone / desktop
+  const r=wrap.getBoundingClientRect();
+  const dpr=Math.min(window.devicePixelRatio||1, 2);
+  W=Math.max(280, Math.round(r.width));
+  H=Math.max(360, Math.round(r.height));
+  canvas.width=W*dpr; canvas.height=H*dpr;
+  canvas.style.width='100%'; canvas.style.height='100%';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  // keep player inside if resized
+  if(player){ player.x=Math.min(player.x, W-40); }
+}
+const floorEl=document.getElementById('floor'), bestEl=document.getElementById('best'), comboEl=document.getElementById('combo'), speedEl=document.getElementById('speed');
+const startScreen=document.getElementById('startScreen'), gameOverScreen=document.getElementById('gameOverScreen'), pauseScreen=document.getElementById('pauseScreen'), comboPop=document.getElementById('comboPop');
+let best=parseInt(localStorage.getItem('towerClimbBest')||'0',10); bestEl.textContent=best;
+let player, floors, camY, floorCount, running, paused, keys, scrollSpeed, maxCombo, lastLandingFloor, comboCount, particles, time, jumpBuffer, coyote;
+const GRAV=0.55, JUMP=-13.8;
+const COMBO_NAMES={2:'GOOD!',3:'SWEET!',4:'SUPER!',5:'WOW!',6:'ULTRA!',7:'MEGA!',8:'INSANE!',9:'GODLIKE!'};
+
+function reset(){
+  floorCount=0; maxCombo=0; comboCount=0; lastLandingFloor=0;
+  camY=0; scrollSpeed=0.55; time=0; particles=[]; jumpBuffer=0; coyote=0;
+  player={x:W/2,y:H-140,w:34,h:42,vx:0,vy:0,face:1,grounded:false};
+  floors=[];
+  let y=H-80;
+  for(let i=0;i<16;i++){ floors.push(makeFloor(y,i)); y-=62; }
+  keys={left:false,right:false};
+  updateHUD();
+}
+function makeFloor(y,index){
+  const difficulty=Math.min(1,index/120);
+  const w=Math.max(95, 175 - difficulty*65 - Math.random()*25);
+  const x=20+Math.random()*Math.max(10,(W-40-w));
+  const hues=[190,200,160,280,320,30];
+  const hue=hues[Math.floor(Math.random()*hues.length)];
+  return {x,y,w,h:16,n:index,hue};
+}
+function updateHUD(){
+  floorEl.textContent=floorCount; bestEl.textContent=best;
+  speedEl.textContent=scrollSpeed.toFixed(1);
+  comboEl.textContent=comboCount>=2 ? (COMBO_NAMES[Math.min(comboCount,9)]||'GODLIKE!') : '—';
+}
+function showCombo(n){
+  if(n<2) return;
+  const txt=COMBO_NAMES[Math.min(n,9)]||'GODLIKE!';
+  comboPop.textContent=txt+'  x'+n; comboPop.style.opacity=1;
+  setTimeout(()=>comboPop.style.opacity=0,700);
+  for(let i=0;i<14;i++) particles.push({x:player.x,y:player.y,vx:(Math.random()-.5)*260,vy:-Math.random()*200,life:.6,color:'#ffe600'});
+}
+function doJump(){
+  if(!running||paused) return;
+  // jump buffer + coyote time makes it feel good on mobile
+  jumpBuffer=0.12;
+}
+function tryJump(){
+  if(player.grounded || coyote>0){
+    player.vy=JUMP; player.grounded=false; coyote=0; jumpBuffer=0;
+    for(let i=0;i<6;i++) particles.push({x:player.x+player.w/2,y:player.y+player.h,vx:(Math.random()-.5)*100,vy:Math.random()*80,life:.35,color:'#aefcff'});
+  }
+}
+function startGame(){ resize(); reset(); running=true; paused=false; startScreen.classList.add('hidden'); gameOverScreen.classList.add('hidden'); pauseScreen.classList.add('hidden'); }
+function gameOver(){
+  running=false;
+  if(floorCount>best){best=floorCount;localStorage.setItem('towerClimbBest',String(best));}
+  document.getElementById('finalFloor').textContent=floorCount;
+  document.getElementById('finalBest').textContent=best;
+  document.getElementById('finalCombo').textContent=maxCombo>=2?COMBO_NAMES[Math.min(maxCombo,9)]+' x'+maxCombo:'—';
+  updateHUD(); setTimeout(()=>gameOverScreen.classList.remove('hidden'),300);
+}
+function togglePause(){ if(!running) return; paused=!paused; pauseScreen.classList.toggle('hidden',!paused); }
+
+let lastTime=0;
+function loop(ts){
+  if(!lastTime) lastTime=ts;
+  const dt=Math.min((ts-lastTime)/16.67,2); lastTime=ts;
+  if(running && !paused){
+    time+=dt/60;
+    scrollSpeed=0.55+floorCount*0.016+time*0.015;
+    camY+=scrollSpeed*dt;
+
+    // horizontal
+    const accel=0.7;
+    if(keys.left){player.vx-=accel*dt; player.face=-1;}
+    if(keys.right){player.vx+=accel*dt; player.face=1;}
+    if(!keys.left && !keys.right) player.vx*=Math.pow(0.86,dt);
+    player.vx=Math.max(-6.5,Math.min(6.5,player.vx));
+    player.x+=player.vx*dt;
+    if(player.x<18){player.x=18;player.vx=Math.abs(player.vx)*0.7;}
+    if(player.x>W-18-player.w){player.x=W-18-player.w;player.vx=-Math.abs(player.vx)*0.7;}
+
+    // timers
+    if(jumpBuffer>0) jumpBuffer-=dt/60;
+    if(coyote>0) coyote-=dt/60;
+    if(jumpBuffer>0) tryJump();
+
+    // gravity - NO AUTO JUMP
+    player.vy+=GRAV*dt;
+    // cap fall speed so you can react
+    if(player.vy>14) player.vy=14;
+    player.y+=player.vy*dt;
+
+    // *** FIX 1: CANNOT GO OUT TOP ***
+    if(player.y<=6){
+      player.y=6;
+      if(player.vy<0) player.vy=0; // stop upward, start falling - no escaping frame
+    }
+
+    // floors move down with camera
+    for(let f of floors){ f.y+=scrollSpeed*dt; }
+    let topY=Math.min(...floors.map(f=>f.y));
+    while(topY>-20){
+      const nextIndex=(floors.length?Math.max(...floors.map(f=>f.n)):0)+1;
+      const gap=58+Math.min(26,nextIndex*0.16)+Math.random()*10;
+      topY-=gap; floors.push(makeFloor(topY,nextIndex));
+    }
+    floors=floors.filter(f=>f.y<H+40);
+
+    // landing / grounded check - only when falling
+    let wasGrounded=player.grounded;
+    player.grounded=false;
+    if(player.vy>=0){
+      for(let f of floors){
+        const feet=player.y+player.h;
+        const prevFeet=feet-player.vy*dt;
+        const withinX=player.x+player.w>f.x+4 && player.x<f.x+f.w-4;
+        if(withinX && prevFeet<=f.y+scrollSpeed*dt+2 && feet>=f.y){
+          const jumped=f.n-lastLandingFloor;
+          if(!wasGrounded && jumped>=2){ comboCount=jumped; maxCombo=Math.max(maxCombo,comboCount); showCombo(comboCount); }
+          else if(!wasGrounded && jumped<2){ comboCount=0; }
+          lastLandingFloor=f.n;
+          floorCount=Math.max(floorCount,f.n);
+          player.y=f.y-player.h; player.vy=0; player.grounded=true; coyote=0.1;
+          if(!wasGrounded){ for(let i=0;i<4;i++) particles.push({x:player.x+player.w/2,y:f.y,vx:(Math.random()-.5)*120,vy:-Math.random()*60,life:.35,color:'#aefcff'}); }
+          break;
+        }
+      }
+    }
+    // if walked off edge, give coyote
+    if(wasGrounded && !player.grounded) coyote=0.1;
+
+    particles.forEach(p=>{p.x+=p.vx*dt/60;p.y+=p.vy*dt/60;p.y+=scrollSpeed*dt;p.life-=dt/60;});
+    particles=particles.filter(p=>p.life>0);
+
+    if(player.y>H+20){ for(let i=0;i<26;i++) particles.push({x:player.x,y:H-20,vx:(Math.random()-.5)*300,vy:-Math.random()*300,life:.8,color:'#ff6b6b'}); gameOver(); }
+    updateHUD();
+  }
+  // DRAW
+  ctx.clearRect(0,0,W,H);
+  const grad=ctx.createLinearGradient(0,0,0,H); grad.addColorStop(0,'#0a1a33'); grad.addColorStop(0.6,'#0e2a4a'); grad.addColorStop(1,'#071020');
+  ctx.fillStyle=grad; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='#0a2438'; ctx.fillRect(0,0,14,H); ctx.fillRect(W-14,0,14,H);
+  ctx.fillStyle='#00e5ff'; ctx.fillRect(14,0,2,H); ctx.fillRect(W-16,0,2,H);
+  ctx.fillStyle='rgba(255,255,255,.06)'; for(let y=-40+(-camY%40); y<H; y+=40){ ctx.fillRect(0,y,14,2); ctx.fillRect(W-14,y,14,2); }
+  for(let f of floors){
+    ctx.save(); ctx.fillStyle='rgba(0,0,0,.35)'; ctx.fillRect(f.x+2,f.y+4,f.w,f.h);
+    const g=ctx.createLinearGradient(0,f.y,0,f.y+f.h); g.addColorStop(0,'#eaffff'); g.addColorStop(0.5,`hsl(${f.hue} 80% 75%)`); g.addColorStop(1,`hsl(${f.hue} 70% 45%)`);
+    ctx.fillStyle=g; ctx.beginPath(); ctx.roundRect(f.x,f.y,f.w,f.h,7); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.85)'; ctx.fillRect(f.x+6,f.y+2,f.w-12,3);
+    ctx.fillStyle='rgba(0,0,0,.55)'; ctx.font='bold 10px sans-serif'; ctx.textAlign='center'; if(f.w>60) ctx.fillText(f.n,f.x+f.w/2,f.y+12);
+    ctx.fillStyle='rgba(255,255,255,.7)'; for(let ix=f.x+10; ix<f.x+f.w-10; ix+=18){ ctx.beginPath(); ctx.moveTo(ix,f.y+f.h); ctx.lineTo(ix+4,f.y+f.h+5+((ix*7)%5)); ctx.lineTo(ix+8,f.y+f.h); ctx.fill(); }
+    ctx.restore();
+  }
+  if(running||paused||!gameOverScreen.classList.contains('hidden')){
+    ctx.save(); ctx.translate(player.x+player.w/2, player.y+player.h/2); ctx.scale(player.face,1);
+    ctx.fillStyle='rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(0,player.h/2+6,18,5,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#ffde59'; ctx.beginPath(); ctx.roundRect(-15,-18,30,34,10); ctx.fill();
+    ctx.fillStyle='#ffe8c2'; ctx.beginPath(); ctx.arc(0,-18,14,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#00e5ff'; ctx.beginPath(); ctx.arc(0,-22,14,Math.PI,0); ctx.fill(); ctx.fillRect(-14,-24,28,5);
+    ctx.fillStyle='#ff6b6b'; ctx.beginPath(); ctx.arc(0,-34,5,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#111'; ctx.beginPath(); ctx.arc(5,-17,2.2,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#222'; ctx.fillRect(-12,16,10,8); ctx.fillRect(2,16,10,8);
+    ctx.restore();
+  }
+  particles.forEach(p=>{ ctx.fillStyle=p.color; ctx.globalAlpha=Math.max(0,p.life); ctx.beginPath(); ctx.arc(p.x,p.y,4,0,Math.PI*2); ctx.fill(); ctx.globalAlpha=1; });
+  ctx.fillStyle='rgba(255,60,60,.9)'; ctx.fillRect(0,H-4,W,4);
+  ctx.fillStyle='rgba(255,60,60,.25)'; ctx.fillRect(0,H-28,W,24);
+  ctx.fillStyle='#fff'; ctx.font='bold 10px sans-serif'; ctx.textAlign='center'; ctx.fillText('▼ DANGER ▼', W/2, H-10);
+  requestAnimationFrame(loop);
+}
+document.getElementById('startBtn').onclick=startGame;
+document.getElementById('restartBtn').onclick=startGame;
+document.getElementById('menuBtn').onclick=()=>{gameOverScreen.classList.add('hidden');startScreen.classList.remove('hidden');running=false;};
+document.getElementById('resumeBtn').onclick=togglePause;
+document.getElementById('pauseBtn').onclick=togglePause;
+const leftBtn=document.getElementById('leftBtn'), rightBtn=document.getElementById('rightBtn'), jumpBtn=document.getElementById('jumpBtn');
+function bindHold(btn, prop){ btn.addEventListener('pointerdown',e=>{e.preventDefault();keys[prop]=true;}); const off=e=>{keys[prop]=false;}; btn.addEventListener('pointerup',off); btn.addEventListener('pointerleave',off); btn.addEventListener('pointercancel',off); }
+bindHold(leftBtn,'left'); bindHold(rightBtn,'right');
+jumpBtn.addEventListener('pointerdown',e=>{e.preventDefault(); doJump();});
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A'){e.preventDefault();keys.left=true;}
+  if(e.key==='ArrowRight'||e.key==='d'||e.key==='D'){e.preventDefault();keys.right=true;}
+  if(e.key===' '||e.key==='ArrowUp'||e.key==='w'||e.key==='W'){
+    e.preventDefault();
+    if(!running && !startScreen.classList.contains('hidden')){ startGame(); return; }
+    if(!running && !gameOverScreen.classList.contains('hidden')){ startGame(); return; }
+    if(e.repeat) return;
+    doJump();
+  }
+  if(e.key==='p'||e.key==='P'){ if(running) togglePause(); }
+  if(e.key==='Enter' && !running) startGame();
+});
+document.addEventListener('keyup',e=>{
+  if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A') keys.left=false;
+  if(e.key==='ArrowRight'||e.key==='d'||e.key==='D') keys.right=false;
+});
+// tap on canvas = jump (mobile friendly)
+canvas.addEventListener('pointerdown',e=>{ if(running && !paused) doJump(); });
+window.addEventListener('resize',()=>{ resize(); });
+resize(); reset();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
